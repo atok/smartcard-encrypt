@@ -58,11 +58,15 @@ object APDU {
         return CommandAPDU(bytes(0x00, 0x2a, 0x9e, 0x9a, data.size) + data + bytes(0x00))
     }
 
-    fun decipher(data: ByteArray): CommandAPDU {
+    fun decipher(data: ByteArray, chain: Boolean = false): CommandAPDU {
         val length = data.size
-        val lenBytes = bytes(0x00, (length shr 8) and 0xFF, length and 0xFF)
+//        val lenBytes = bytes(0x00, (length shr 8) and 0xFF, length and 0xFF)
+        // turns out openPGP in yubikey does not support extended APDU
+        val lenBytes = bytes(length)
 
-        return CommandAPDU(bytes(0x00, 0x2a, 0x80, 0x86) + lenBytes + bytes(0x00) + data + bytes(0x00))
+        val cla = if(chain) 0x10 else 0x00
+        val bytes = bytes(cla, 0x2a, 0x80, 0x86) + lenBytes + data + bytes(0x00)
+        return CommandAPDU(bytes)
     }
 
     fun selectApplet(aid: ByteArray = OPEN_PGP_AID): CommandAPDU {
@@ -112,7 +116,7 @@ fun prepareDataForEncryption(secret: ByteArray): ByteArray {
             compressedDataGenerator.open(
                     detaPrepareResultOutputStream
             ),
-            PGPLiteralData.BINARY, "filename", secretInputStream.available().toLong(), Date()
+            PGPLiteralData.BINARY, "f", secretInputStream.available().toLong(), Date()
     )
 
     Streams.pipeAll(secretInputStream, dataPrepareOutputStream)
@@ -135,12 +139,12 @@ fun encrypt(key: PGPPublicKey, secret: ByteArray): ByteArray {
     pgpEncryptedDataGenerator.addMethod(BcPublicKeyKeyEncryptionMethodGenerator(key))
 
     val resultOutputStream = ByteArrayOutputStream()
-    val armorOutputStream = ArmoredOutputStream(resultOutputStream)
-    val generatorOutputStream = pgpEncryptedDataGenerator.open(armorOutputStream, preparedData.size.toLong())
+//    val armorOutputStream = ArmoredOutputStream(resultOutputStream)
+    val generatorOutputStream = pgpEncryptedDataGenerator.open(resultOutputStream, preparedData.size.toLong())
 
     generatorOutputStream.write(preparedData)
     generatorOutputStream.close()
-    armorOutputStream.close()
+//    armorOutputStream.close()
 
     return resultOutputStream.toByteArray()
 }
@@ -172,14 +176,20 @@ fun main(args: Array<String>) {
 //        val garbageDecipherAnswer = cardChannel.transmit(CommandAPDU("xxxx".toByteArray()))
 //        println("Garbage decipher $garbageDecipherAnswer")
 
-        val testAnswer = cardChannel.transmit(APDU.decypherTest2)
+        val testAnswer = cardChannel.transmit(APDU.decypherTest)
         println("Test decipher answer $testAnswer")
 //
         val publicKey = readPublicKey(File("data/43B6CF90C5DECBBC08B0BE46D56DF27BD3065500.asc"))
-        var encrypted = encrypt(publicKey, "abcd".toByteArray())
+        var encrypted = encrypt(publicKey, "xxxx".toByteArray())
         println(String(encrypted))
 
-        val enc1Answer = cardChannel.transmit(APDU.decipher(encrypted))
+        val part1 = encrypted.slice((0..200)).toByteArray()
+        val part2 = encrypted.slice((201..encrypted.size)).toByteArray()
+
+        val enc2Answer = cardChannel.transmit(APDU.decipher(part1, chain = true))
+        println("Decipher data $enc2Answer")
+
+        val enc1Answer = cardChannel.transmit(APDU.decipher(part2))
         println("Decipher data $enc1Answer")
 
         val decryptedData = enc1Answer.data.map { it.toChar() }.toString()
