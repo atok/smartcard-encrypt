@@ -176,15 +176,15 @@ fun main(args: Array<String>) {
 //        val garbageDecipherAnswer = cardChannel.transmit(CommandAPDU("xxxx".toByteArray()))
 //        println("Garbage decipher $garbageDecipherAnswer")
 
-        val testAnswer = cardChannel.transmit(APDU.decypherTest)
-        println("Test decipher answer $testAnswer")
+//        val testAnswer = cardChannel.transmit(APDU.decypherTest)
+//        println("Test decipher answer $testAnswer")
 //
         val publicKey = readPublicKey(File("data/43B6CF90C5DECBBC08B0BE46D56DF27BD3065500.asc"))
-        var encrypted = encrypt(publicKey, "xxxx".toByteArray())
+        var encrypted = bytes(0x00) + encrypt(publicKey, "xxxx".toByteArray())
         println(String(encrypted))
 
-        val part1 = encrypted.slice((0..200)).toByteArray()
-        val part2 = encrypted.slice((201..encrypted.size)).toByteArray()
+        val part1 = encrypted.sliceArray((0..250))
+        val part2 = encrypted.sliceArray((251..encrypted.size-1))
 
         val enc2Answer = cardChannel.transmit(APDU.decipher(part1, chain = true))
         println("Decipher data $enc2Answer")
