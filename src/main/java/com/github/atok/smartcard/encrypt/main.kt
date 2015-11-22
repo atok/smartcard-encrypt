@@ -149,6 +149,15 @@ fun encrypt(key: PGPPublicKey, secret: ByteArray): ByteArray {
     return resultOutputStream.toByteArray()
 }
 
+fun asciiArmor(bytes: ByteArray): String {
+    val resultOutputStream = ByteArrayOutputStream()
+    val armorOutputStream = ArmoredOutputStream(resultOutputStream)
+    armorOutputStream.write(bytes)
+    armorOutputStream.close()
+
+    return String(resultOutputStream.toByteArray())
+}
+
 fun main(args: Array<String>) {
     Security.addProvider(BouncyCastleProvider());
 
@@ -180,11 +189,12 @@ fun main(args: Array<String>) {
 //        println("Test decipher answer $testAnswer")
 //
         val publicKey = readPublicKey(File("data/43B6CF90C5DECBBC08B0BE46D56DF27BD3065500.asc"))
-        var encrypted = bytes(0x00) + encrypt(publicKey, "xxxx".toByteArray())
-        println(String(encrypted))
+        var encrypted = encrypt(publicKey, "this is just a test".toByteArray())
+        println(asciiArmor(encrypted))
 
-        val part1 = encrypted.sliceArray((0..250))
-        val part2 = encrypted.sliceArray((251..encrypted.size-1))
+        //256 bytes + 1 padding byte
+        val part1 = bytes(0x00) + encrypted.sliceArray((0..200))
+        val part2 = encrypted.sliceArray((201..255))
 
         val enc2Answer = cardChannel.transmit(APDU.decipher(part1, chain = true))
         println("Decipher data $enc2Answer")
