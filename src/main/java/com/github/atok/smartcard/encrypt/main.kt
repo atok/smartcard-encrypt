@@ -12,14 +12,21 @@ import org.bouncycastle.util.io.Streams
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.math.BigInteger
+import java.security.KeyFactory
+import java.security.PublicKey
 import java.security.SecureRandom
 import java.security.Security
+import java.security.spec.RSAPublicKeySpec
 import java.util.*
+import javax.crypto.Cipher
 import javax.smartcardio.CommandAPDU
 import javax.smartcardio.TerminalFactory
 
 
 object APDU {
+
+    // CLA INS PI P2 LC CDATA
 
     val decypherTest = CommandAPDU(bytes(0x00, 0x2A, 0x80, 0x86,
             0x23,   // size ? (35)
@@ -72,90 +79,49 @@ object APDU {
     fun selectApplet(aid: ByteArray = OPEN_PGP_AID): CommandAPDU {
         return CommandAPDU(0x00, 0xA4, 0x04, 0x00, aid)
     }
-}
 
-fun readPublicKey(file: File): PGPPublicKey {
-    val stream = PGPUtil.getDecoderStream(file.inputStream())
-    val foundKey = stream.use { input ->
-        val pkCol = BcPGPPublicKeyRingCollection(input)
-
-        var key: PGPPublicKey? = null
-
-        val keyRings =  pkCol.keyRings as Iterator<PGPPublicKeyRing>
-        keyRings.forEach {
-            val keys = it.publicKeys as Iterator<PGPPublicKey>
-            keys.forEach {
-                if(it.isEncryptionKey) key = it
-            }
-        }
-
-        key
+    fun getPublicKey(): ByteArray {
+        return bytes(0x00, 0x47, 0x00, 0x00, 0x01, 0xB8)
     }
-
-    return foundKey ?: throw RuntimeException("No key")
 }
 
-//fun pkcs1cryptogram(message: ByteArray): ByteArray {
-//    // at least 8
-//
-//    val l = message.size
-//    val n = 0           //modulus of private key
-//    val paddingStringLength = n - 3 - l
-//
-//    val ps = bytes()
-//    return bytes(0x00, 0x02) + ps + bytes(0x00) + message
-//}
+fun parsePublicKey(byteArray: ByteArray): PublicKey {
+    val bytes = OffsetBytes(byteArray, 0)
+    if(!bytes.check(bytes(0x7f, 0x49))) throw IllegalArgumentException("Expecting 0x7f 0x49")
 
-fun prepareDataForEncryption(secret: ByteArray): ByteArray {
-    val secretInputStream = ByteArrayInputStream(secret)
-    val literalDataGenerator = PGPLiteralDataGenerator()
-    val compressedDataGenerator = PGPCompressedDataGenerator(CompressionAlgorithmTags.UNCOMPRESSED)
-    val detaPrepareResultOutputStream = ByteArrayOutputStream()
+    val totalLength = readLength(bytes)
+    if(!bytes.check(bytes(0x81))) throw IllegalArgumentException("Expecting 0x81 - modulus")
 
-    val dataPrepareOutputStream = literalDataGenerator.open(
-            compressedDataGenerator.open(
-                    detaPrepareResultOutputStream
-            ),
-            PGPLiteralData.BINARY, "f", secretInputStream.available().toLong(), Date()
-    )
+    val modulusLength = readLength(bytes)
+    val modulusBytes = bytes.next(modulusLength)
 
-    Streams.pipeAll(secretInputStream, dataPrepareOutputStream)
-    compressedDataGenerator.close() //why this one?
+    if(!bytes.check(bytes(0x82))) throw IllegalArgumentException("Expecting 0x82 - exponent")
 
-    return detaPrepareResultOutputStream.toByteArray()
+    val exponentLength = bytes.nextAsInt()
+    val exponentBytes = bytes.next(exponentLength)
+
+    if(!bytes.check(bytes(0x90, 0x00))) throw IllegalArgumentException("Expecting 0x90 0x00")
+
+    val spec = RSAPublicKeySpec(BigInteger(modulusBytes.toHexString(), 16), BigInteger(exponentBytes.toHexString(), 16))
+    val keyFactory = KeyFactory.getInstance("RSA");
+
+    return keyFactory.generatePublic(spec)
 }
 
-/**
- * This encryption method is OK. GPG tool is able to decrypt its result!
- */
-fun encrypt(key: PGPPublicKey, secret: ByteArray): ByteArray {
-    val preparedData = prepareDataForEncryption(secret)
 
-    val jcePgpDataEncryptorBuilder =
-            BcPGPDataEncryptorBuilder(SymmetricKeyAlgorithmTags.TRIPLE_DES)
-            .setSecureRandom(SecureRandom())
-
-    val pgpEncryptedDataGenerator = PGPEncryptedDataGenerator(jcePgpDataEncryptorBuilder)
-    pgpEncryptedDataGenerator.addMethod(BcPublicKeyKeyEncryptionMethodGenerator(key))
-
-    val resultOutputStream = ByteArrayOutputStream()
-//    val armorOutputStream = ArmoredOutputStream(resultOutputStream)
-    val generatorOutputStream = pgpEncryptedDataGenerator.open(resultOutputStream, preparedData.size.toLong())
-
-    generatorOutputStream.write(preparedData)
-    generatorOutputStream.close()
-//    armorOutputStream.close()
-
-    return resultOutputStream.toByteArray()
+fun readLength(bytes: OffsetBytes): Int {
+    return when(bytes.next()) {
+        0x81.toByte() -> bytes.next().toInt() and 0xff
+        0x82.toByte() -> (bytes.next().toInt() and 0xff) * 256 + (bytes.next().toInt() and 0xff)
+        else -> throw IllegalArgumentException("Expecting 0x81 or 0x82")
+    }
 }
 
-fun asciiArmor(bytes: ByteArray): String {
-    val resultOutputStream = ByteArrayOutputStream()
-    val armorOutputStream = ArmoredOutputStream(resultOutputStream)
-    armorOutputStream.write(bytes)
-    armorOutputStream.close()
+fun encrypt(key: PublicKey, data: ByteArray): ByteArray {
+    val rsa = Cipher.getInstance("RSA/NONE/PKCS1Padding") // RSA/ECB/PKCS1Padding
+    rsa.init(Cipher.ENCRYPT_MODE, key)
 
-    return String(resultOutputStream.toByteArray())
+    return rsa.doFinal(data)
 }
 
 fun main(args: Array<String>) {
@@ -179,21 +145,25 @@ fun main(args: Array<String>) {
 //        val signAnswer = cardChannel.transmit(APDU.sign("test".toByteArray()))
 //        println("Sign data $signAnswer")
 
+        /*
+        fun verify(): ByteArray {
+    val pin = "123456"
+    return bytes(0x00, 0x20, 0x00, 0x82, pin.length) + pin.toByteArray(Charsets.UTF_8)
+}
+         */
+
         val pinAnswer2 = cardChannel.transmit(APDU.verify("123456", 0x82))
-        println("Pin verify PW2 $pinAnswer2")
+        println("Pin verify PW2: $pinAnswer2")
 
-//        val garbageDecipherAnswer = cardChannel.transmit(CommandAPDU("xxxx".toByteArray()))
-//        println("Garbage decipher $garbageDecipherAnswer")
+        val answer2 = cardChannel.transmit(CommandAPDU(APDU.getPublicKey()))
+        println("GetPublicLey: $answer2")
+        val key = parsePublicKey(answer2.bytes)
 
-//        val testAnswer = cardChannel.transmit(APDU.decypherTest)
-//        println("Test decipher answer $testAnswer")
-//
-        val publicKey = readPublicKey(File("data/43B6CF90C5DECBBC08B0BE46D56DF27BD3065500.asc"))
-        var encrypted = encrypt(publicKey, "this is just a test".toByteArray())
-        println(asciiArmor(encrypted))
+        val encrypted = encrypt(key, "Good evening everyone!".toByteArray(Charsets.UTF_8))
+        println(encrypted.toHexString())
 
         //256 bytes + 1 padding byte
-        val part1 = bytes(0x00) + encrypted.sliceArray((0..200))
+        val part1 = bytes(0) + encrypted.sliceArray((0..200))
         val part2 = encrypted.sliceArray((201..255))
 
         val enc2Answer = cardChannel.transmit(APDU.decipher(part1, chain = true))
