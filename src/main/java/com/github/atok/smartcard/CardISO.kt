@@ -65,6 +65,38 @@ object CardISO {
         return keyFactory.generatePublic(spec)
     }
 
+    fun message(sw1: Int, sw2: Int): String {
+        return when(sw1) {
+            0x90 -> "OK"
+            0x62 -> "WARNING: State of non-volatile memory unchanged, " + when(sw2) {
+                0x00 -> ""
+                0x81 -> "Part of returned data may be corrupted"
+                0x82 -> "End of file/record reached before reading Le bytes"
+                0x83 -> "Selected file invalidated"
+                0x84 -> "FCI not formatted according to 1.1.5"
+                else -> "?"
+            }
+            0x63 -> "WARNING: State of non-volatile memory changed, " + when(sw2) {
+                0x00 -> ""
+                0x81 -> "File filled up by the last write"
+                else -> "?"
+            }
+            0x69 -> "Command not allowed, " + when(sw2) {
+                0x00 -> ""
+                0x81 -> "Command incompatible with file structure"
+                0x82 -> "Security status not satisfied"
+                0x83 -> "Authentication method blocked"
+                0x84 -> "Referenced data invalidated"
+                0x85 -> "Conditions of use not satisfied"
+                0x86 -> "Command not allowed (no current EF)"
+                0x87 -> "Expected SM data objects missing"
+                0x88 -> "SM data objects incorrect"
+                else -> "?"
+            }
+            else -> "?"
+        }
+    }
+
     private fun ByteArray.toHexString(): String {
         return this.map {
             val v = it.toInt() and 0xff
