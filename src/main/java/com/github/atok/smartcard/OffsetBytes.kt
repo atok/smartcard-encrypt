@@ -1,4 +1,4 @@
-package com.github.atok.smartcard.encrypt
+package com.github.atok.smartcard
 
 data class OffsetBytes(val bytes: ByteArray, var offset: Int) {
     fun next(): Byte {
