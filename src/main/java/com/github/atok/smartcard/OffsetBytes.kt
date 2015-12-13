@@ -23,6 +23,14 @@ data class OffsetBytes(val bytes: ByteArray, var offset: Int) {
         return true
     }
 
+    fun check(checked: Int): Boolean {
+        return check(byteArrayOf(checked.toByte()))
+    }
+
+    fun check(vararg checked: Int): Boolean {
+        return check(checked.map { it.toByte() }.toByteArray())
+    }
+
     operator fun get(i: Int): Byte {
         return bytes[i]
     }

@@ -1,5 +1,7 @@
 package com.github.atok.smartcard
 
+import com.github.atok.smartcard.iso.APDU
+import com.github.atok.smartcard.iso.ResponseParser
 import java.security.PublicKey
 import javax.smartcardio.Card
 import javax.smartcardio.CardChannel
@@ -24,20 +26,20 @@ public class SimpleSmartCard(val card: Card) {
     }
 
     fun selectApplet() {
-        val response = cardChannel.transmit(CardISO.selectApplet())
+        val response = cardChannel.transmit(APDU.selectApplet())
         interpretResponse(response)
     }
 
     fun verify(pinValue: String) {
-        val response = cardChannel.transmit(CardISO.verify(pinValue))
+        val response = cardChannel.transmit(APDU.verify(pinValue))
         interpretResponse(response)
     }
 
     fun publicKey(): PublicKey {
-        val response = cardChannel.transmit(CardISO.getPublicKey())
+        val response = cardChannel.transmit(APDU.getPublicKey())
         interpretResponse(response)
 
-        return CardISO.parsePublicKey(response.bytes)
+        return ResponseParser.parsePublicKey(response.bytes)
     }
 
     fun decipher(encrypted: ByteArray): ByteArray {
@@ -46,17 +48,17 @@ public class SimpleSmartCard(val card: Card) {
         val part1 = byteArrayOf(0) + encrypted.sliceArray((0..200))
         val part2 = encrypted.sliceArray((201..255))
 
-        val response1 = cardChannel.transmit(CardISO.decipher(part1, chain = true))
+        val response1 = cardChannel.transmit(APDU.decipher(part1, chain = true))
         interpretResponse(response1)
 
-        val response2 = cardChannel.transmit(CardISO.decipher(part2))
+        val response2 = cardChannel.transmit(APDU.decipher(part2))
         interpretResponse(response2)
 
         return response2.data
     }
 
     fun sign(bytes: ByteArray) {
-        val signAnswer = cardChannel.transmit(CardISO.sign(bytes))
+        val signAnswer = cardChannel.transmit(APDU.sign(bytes))
         println("Sign data $signAnswer")
     }
 
@@ -69,7 +71,7 @@ public class SimpleSmartCard(val card: Card) {
         val sw2 = response.sW2
 
         if(sw1 == 0x90) return //OK
-        val msg = CardISO.message(sw1, sw2)
+        val msg = ResponseParser.message(sw1, sw2)
 
         throw RuntimeException("$response $msg")
     }
