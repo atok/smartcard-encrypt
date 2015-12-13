@@ -1,7 +1,7 @@
 package com.github.atok
 
 import com.github.atok.smartcard.CryptoTools
-import com.github.atok.smartcard.SimpleSmartCard
+import com.github.atok.smartcard.OpenPgpSmartCard
 import java.io.File
 import java.nio.file.Files
 
@@ -14,7 +14,7 @@ fun main(args: Array<String>) {
     val message = Files.readAllBytes(File("data/example.txt").toPath())
     val encryptedMessage = CryptoTools.desEncrypt(message, symmetricKey)
 
-    val card = SimpleSmartCard.default()
+    val card = OpenPgpSmartCard.default()
 
     try {
         card.selectApplet()

@@ -8,12 +8,12 @@ import javax.smartcardio.CardChannel
 import javax.smartcardio.ResponseAPDU
 import javax.smartcardio.TerminalFactory
 
-public class SimpleSmartCard(val card: Card) {
+public class OpenPgpSmartCard(val card: Card) {
 
     private val cardChannel: CardChannel = card.basicChannel
 
     companion object {
-        fun default(): SimpleSmartCard {
+        fun default(): OpenPgpSmartCard {
             val terminalFactory = TerminalFactory.getDefault()
             val terminals = terminalFactory.terminals().list()
             val terminal = terminals.firstOrNull() ?: throw IllegalArgumentException("Terminal not found")
@@ -21,7 +21,7 @@ public class SimpleSmartCard(val card: Card) {
             println("Connecting to $terminal")  //TODO remove
             val card = terminal.connect("*")
 
-            return SimpleSmartCard(card)
+            return OpenPgpSmartCard(card)
         }
     }
 

@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.github.atok.smartcard</groupId>
-    <artifactId>encrypt</artifactId>
+    <artifactId>OpenPgpSmartCard</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
